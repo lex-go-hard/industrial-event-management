@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: iem-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: industrial_event_management
+      POSTGRES_USER: industrial_user
+      POSTGRES_PASSWORD: industrial_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U industrial_user -d industrial_event_management"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: iem-pgadmin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  backup:
+    image: postgres:16-alpine
+    container_name: iem-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: industrial_password
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: industrial_user
+      PGDATABASE: industrial_event_management
+      BACKUP_DIR: /backups
+      BACKUP_KEEP_DAYS: 7
+    volumes:
+      - pg_backups:/backups
+    entrypoint: ["/bin/sh","-lc"]
+    command: >
+      "apk add --no-cache tzdata &&
+      echo '0 3 * * * /bin/sh -lc \"pg_dump -Fc -f $BACKUP_DIR/backup_$(date +%F).dump && find $BACKUP_DIR -type f -mtime +$BACKUP_KEEP_DAYS -delete\"' | crontab - &&
+      crond -f -l 8"
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  pg_backups:
+

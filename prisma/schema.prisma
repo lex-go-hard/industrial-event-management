@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DEPARTMENT_HEAD
+  EMPLOYEE
+}
+
+enum EventStatus {
+  DRAFT
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ParticipationStatus {
+  INVITED
+  CONFIRMED
+  DECLINED
+  ATTENDED
+  NO_SHOW
+}
+
+enum RosterEntryType {
+  EMPLOYEE
+  STUDENT
+}
+
+enum RatingUploadStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model Department {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  headUserId String?
+  headUser   User?   @relation("DepartmentHead", fields: [headUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  users  User[]  @relation("UserDepartment")
+  events Event[]
+
+  workPlans      WorkPlan[]
+  monthlyReports MonthlyReport[]
+
+  rosterEntries    RosterEntry[]
+  ratingUploadLogs RatingUploadLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([headUserId])
+}
+
+model User {
+  id         String  @id @default(cuid())
+  email      String  @unique
+  employeeNo String? @unique
+
+  passwordHash String?
+
+  // Encrypted at rest via Prisma middleware:
+  lastName    String
+  firstName   String
+  middleName  String?
+  dateOfBirth String?
+
+  role Role @default(EMPLOYEE)
+
+  departmentId String?
+  department   Department? @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  headedDepartments Department[] @relation("DepartmentHead")
+
+  createdEvents  Event[]              @relation("EventCreatedBy")
+  participations EventParticipation[]
+
+  rosterEntries RosterEntry[]
+
+  workPlans WorkPlan[]
+  monthlyReportsAuthored MonthlyReport[] @relation("MonthlyReportAuthor")
+
+  ratingUploads RatingUploadLog[] @relation("RatingUploadBy")
+
+  auditLogs AuditLog[]
+  notifications Notification[]
+  quarterlyReminderImports QuarterlyReminderImport[]
+  apiActionLogs ApiActionLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([role])
+  @@index([lastName, firstName])
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  location    String?
+  status      EventStatus @default(DRAFT)
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdById String
+  createdBy   User   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  participations EventParticipation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId, startsAt])
+  @@index([createdById, startsAt])
+  @@index([status, startsAt])
+}
+
+model EventParticipation {
+  id         String              @id @default(cuid())
+  eventId    String
+  userId     String
+  status     ParticipationStatus @default(INVITED)
+  notes      String?
+  attendedAt DateTime?
+  prizePlace Int?
+  ratingPoints Int?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([userId, status])
+  @@index([eventId, status])
+  @@index([eventId, prizePlace])
+}
+
+model WorkPlan {
+  id String @id @default(cuid())
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  month Int
+  year  Int
+
+  // Freeform plan content / serialized JSON
+  contentJson Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, year, month])
+  @@index([departmentId, year, month])
+  @@index([year, month])
+}
+
+model MonthlyReport {
+  id           String @id @default(cuid())
+  departmentId String
+  month        Int
+  year         Int
+
+  // KPIs / results / serialized JSON
+  contentJson Json
+
+  createdById String?
+  createdBy   User?   @relation("MonthlyReportAuthor", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([departmentId, year, month])
+  @@index([year, month])
+  @@index([createdById])
+}
+
+/// Student/EmployeeList: roster of people tied to departments (can be linked to a User or be external).
+model RosterEntry {
+  id           String          @id @default(cuid())
+  departmentId String
+  type         RosterEntryType @default(EMPLOYEE)
+
+  // Optional link to a real user account.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // Encrypted at rest via Prisma middleware (for external people too):
+  lastName    String
+  firstName   String
+  middleName  String?
+  dateOfBirth String?
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  activeFrom DateTime? // e.g. employment/student start
+  activeTo   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([departmentId, userId], map: "roster_department_user_unique")
+  @@index([departmentId, type])
+  @@index([lastName, firstName])
+  @@index([userId])
+}
+
+model RatingUploadLog {
+  id           String  @id @default(cuid())
+  departmentId String?
+  uploadedById String?
+
+  month Int?
+  year  Int?
+
+  status         RatingUploadStatus @default(PENDING)
+  sourceFilename String?
+
+  totalRows    Int?    @default(0)
+  successRows  Int?    @default(0)
+  failedRows   Int?    @default(0)
+  errorMessage String?
+
+  // Storage reference (S3 path, local path, etc.)
+  storageKey String?
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  uploadedBy User?       @relation("RatingUploadBy", fields: [uploadedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId, year, month])
+  @@index([uploadedById, createdAt])
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // who
+  actorUserId String?
+  actorUser   User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // when
+  createdAt DateTime @default(now())
+
+  // what
+  action   String // create | update | delete | upsert | createMany | updateMany | deleteMany
+  table    String // Prisma model name
+  recordId String?
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([table, recordId])
+}
+
+enum NotificationType {
+  EVENT_CREATED
+  EVENT_CANCELLED
+  EVENT_RESCHEDULED
+  WORKPLAN_CREATED
+  WORKPLAN_UPDATED
+  QUARTERLY_REMINDER
+}
+
+model Notification {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  type  NotificationType
+  title String
+  body  String?
+  data  Json?
+
+  readAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt])
+}
+
+model QuarterlyReminderImport {
+  id String @id @default(cuid())
+
+  departmentId String
+  year         Int
+  quarter      Int
+
+  contentJson Json
+
+  createdById String?
+  createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([departmentId, year, quarter])
+  @@index([year, quarter])
+}
+
+model ApiActionLog {
+  id String @id @default(cuid())
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  method String
+  path   String
+  status Int
+  ip     String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([path, createdAt])
+}
