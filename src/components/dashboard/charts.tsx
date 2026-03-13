@@ -14,7 +14,7 @@ import {
 } from "recharts";
 
 type ParticipationStat = {
-  departmentName: string;
+  schoolName: string;
   confirmed: number;
 };
 
@@ -32,7 +32,7 @@ export function DashboardCharts({ participationByDept }: Props) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={participationByDept}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="departmentName" tick={{ fontSize: 10 }} />
+            <XAxis dataKey="schoolName" tick={{ fontSize: 10 }} />
             <YAxis tick={{ fontSize: 10 }} />
             <Tooltip />
             <Bar dataKey="confirmed" fill="#18181b" radius={[6, 6, 0, 0]} />
@@ -49,7 +49,7 @@ export function DashboardCharts({ participationByDept }: Props) {
             <Pie
               data={participationByDept}
               dataKey="confirmed"
-              nameKey="departmentName"
+              nameKey="schoolName"
               innerRadius={40}
               outerRadius={70}
               paddingAngle={4}
@@ -60,4 +60,5 @@ export function DashboardCharts({ participationByDept }: Props) {
     </div>
   );
 }
+
 

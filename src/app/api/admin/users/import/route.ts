@@ -9,8 +9,8 @@ import { safeAuth } from "@/lib/auth-safe";
 const rowSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
-  departmentCode: z.string().min(1),
-  role: z.enum(["ADMIN", "DEPARTMENT_HEAD", "EMPLOYEE"]).optional(),
+  apzCode: z.string().min(1),
+  role: z.enum(["MAIN_APZ_ADMIN", "ZAVUCH", "CLASS_TEACHER"]).optional(),
 });
 
 function randomPassword(length = 12) {
@@ -24,7 +24,9 @@ function randomPassword(length = 12) {
 export async function POST(req: Request) {
   const session = await safeAuth();
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  if (session.user.role !== "ADMIN") return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  if (session.user.role !== "MAIN_APZ_ADMIN") {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
@@ -48,12 +50,12 @@ export async function POST(req: Request) {
 
   const idxEmail = map["email"];
   const idxPassword = map["password"];
-  const idxDepartmentCode = map["departmentcode"];
+  const idxApzCode = map["apzcode"];
   const idxRole = map["role"];
 
-  if (!idxEmail || !idxDepartmentCode) {
+  if (!idxEmail || !idxApzCode) {
     return NextResponse.json(
-      { error: "INVALID_HEADERS (need Email and DepartmentCode)" },
+      { error: "INVALID_HEADERS (need Email and APZCode)" },
       { status: 400 },
     );
   }
@@ -62,20 +64,24 @@ export async function POST(req: Request) {
   let skipped = 0;
   let failed = 0;
 
-  // Preload departments by code.
-  const depts = (await prisma.department.findMany({
-    select: { id: true, code: true },
-  })) as Array<{ id: string; code: string }>;
-  const deptByCode = new Map(depts.map((d: { id: string; code: string }) => [d.code.toLowerCase(), d.id]));
+  // Preload schools by APZ code.
+  const schools = (await prisma.school.findMany({
+    select: { id: true, apzCode: true },
+  })) as Array<{ id: string; apzCode: string | null }>;
+  const schoolByApz = new Map(
+    schools
+      .filter((s) => typeof s.apzCode === "string" && s.apzCode.length > 0)
+      .map((s) => [String(s.apzCode).toLowerCase(), s.id]),
+  );
 
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const email = String(row.getCell(idxEmail).text || "").trim();
     const password = idxPassword ? String(row.getCell(idxPassword).text || "").trim() : "";
-    const departmentCode = String(row.getCell(idxDepartmentCode).text || "").trim();
+    const apzCode = String(row.getCell(idxApzCode).text || "").trim();
     const role = idxRole ? String(row.getCell(idxRole).text || "").trim() : "";
 
-    if (!email || !departmentCode) {
+    if (!email || !apzCode) {
       skipped++;
       continue;
     }
@@ -83,7 +89,7 @@ export async function POST(req: Request) {
     const parsed = rowSchema.safeParse({
       email,
       password: password || undefined,
-      departmentCode,
+      apzCode,
       role: role || undefined,
     });
     if (!parsed.success) {
@@ -91,8 +97,8 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const deptId = deptByCode.get(parsed.data.departmentCode.toLowerCase());
-    if (!deptId) {
+    const schoolId = schoolByApz.get(parsed.data.apzCode.toLowerCase());
+    if (!schoolId) {
       failed++;
       continue;
     }
@@ -109,11 +115,9 @@ export async function POST(req: Request) {
     await prisma.user.create({
       data: {
         email: parsed.data.email,
-        passwordHash,
-        role: parsed.data.role ?? "EMPLOYEE",
-        departmentId: deptId,
-        firstName: "",
-        lastName: "",
+        password: passwordHash,
+        role: parsed.data.role ?? "CLASS_TEACHER",
+        schoolId,
       },
     });
     created++;

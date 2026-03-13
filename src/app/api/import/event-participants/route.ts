@@ -16,7 +16,7 @@ const itemSchema = z.object({
 
 const payloadSchema = z.object({
   eventId: z.string().min(1),
-  departmentId: z.string().min(1),
+  schoolId: z.string().min(1),
   items: z.array(itemSchema).min(1),
 });
 
@@ -101,14 +101,14 @@ async function parseWord(file: File) {
 export async function POST(req: Request) {
   const session = await safeAuth();
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  if (session.user.role !== "ADMIN" && session.user.role !== "DEPARTMENT_HEAD") {
+  if (session.user.role !== "MAIN_APZ_ADMIN" && session.user.role !== "ZAVUCH") {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
   const eventId = searchParams.get("eventId") ?? "";
-  const departmentId = searchParams.get("departmentId") ?? "";
-  if (!eventId || !departmentId) {
+  const schoolId = searchParams.get("schoolId") ?? "";
+  if (!eventId || !schoolId) {
     return NextResponse.json({ error: "INVALID_QUERY" }, { status: 400 });
   }
 
@@ -120,11 +120,11 @@ export async function POST(req: Request) {
   const items =
     name.endsWith(".xlsx") ? await parseExcel(file) : name.endsWith(".docx") ? await parseWord(file) : [];
 
-  const payload = payloadSchema.safeParse({ eventId, departmentId, items });
+  const payload = payloadSchema.safeParse({ eventId, schoolId, items });
   if (!payload.success) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
 
   const users = (await prisma.user.findMany({
-    where: { departmentId, email: { in: payload.data.items.map((i) => i.email) } },
+    where: { schoolId, email: { in: payload.data.items.map((i) => i.email) } },
     select: { id: true, email: true },
   })) as Array<{ id: string; email: string }>;
   const userByEmail = new Map(
@@ -167,3 +167,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, upserted, skipped });
 }
+
+

@@ -18,7 +18,7 @@ const bodySchema = z.object({
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await safeAuth();
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  if (session.user.role !== "ADMIN" && session.user.role !== "DEPARTMENT_HEAD") {
+  if (session.user.role !== "MAIN_APZ_ADMIN" && session.user.role !== "ZAVUCH") {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -60,3 +60,4 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({ ok: true, participants: wantedUserIds.length });
 }
+

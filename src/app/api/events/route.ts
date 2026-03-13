@@ -26,12 +26,12 @@ export async function GET(req: Request) {
     return json({ error: "UNAUTHORIZED" }, { status: 401, req });
   }
 
-  // Employees see ONLY enterprise-wide events => departmentId = null
+  // Employees see ONLY enterprise-wide events => schoolId = null
   const where =
-    session.user.role === "ADMIN"
+    session.user.role === "MAIN_APZ_ADMIN"
       ? {}
       : {
-          departmentId: null,
+          schoolId: null,
         };
 
   const events = await prisma.event.findMany({
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     await logApiAction({ req, status: 401, userId: null });
     return json({ error: "UNAUTHORIZED" }, { status: 401, req });
   }
-  if (session.user.role !== "ADMIN") {
+  if (session.user.role !== "MAIN_APZ_ADMIN") {
     await logApiAction({ req, status: 403, userId: session.user.id });
     return json({ error: "FORBIDDEN" }, { status: 403, req });
   }
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
       startsAt: new Date(parsed.data.startsAt),
       endsAt: parsed.data.endsAt ? new Date(parsed.data.endsAt) : null,
       status: "PLANNED",
-      departmentId: null, // enterprise-wide
+      schoolId: null, // enterprise-wide
       createdById: session.user.id,
     },
   });
@@ -84,11 +84,11 @@ export async function POST(req: Request) {
     userIds: users.map((u: UserIdRow) => u.id),
     type: "EVENT_CREATED",
     title: "Новое мероприятие предприятия",
-    body: `${event.title} (${event.startsAt.toLocaleString()})`,
+    body: `${event.title} (${new Date(event.startsAt).toLocaleString()})`,
     data: { eventId: event.id },
     email: {
       subject: `Новое мероприятие: ${event.title}`,
-      text: `Создано мероприятие предприятия: ${event.title}\nДата/время: ${event.startsAt.toLocaleString()}`,
+      text: `Создано мероприятие предприятия: ${event.title}\nДата/время: ${new Date(event.startsAt).toLocaleString()}`,
     },
   });
 
@@ -99,3 +99,7 @@ export async function POST(req: Request) {
 export async function OPTIONS(req: Request) {
   return handleCors(req) ?? new Response(null, { status: 204 });
 }
+
+
+
+

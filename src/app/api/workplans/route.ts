@@ -37,8 +37,17 @@ export async function GET(req: Request) {
     return json({ error: "INVALID_QUERY" }, { status: 400, req });
   }
 
-  const plan = await prisma.workPlan.findUnique({
-    where: { ownerId_year_month: { ownerId: session.user.id, year, month } },
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { schoolId: true },
+  });
+  if (!user?.schoolId) {
+    await logApiAction({ req, status: 400, userId: session.user.id });
+    return json({ error: "NO_SCHOOL" }, { status: 400, req });
+  }
+
+  const plan = await prisma.monthlyReport.findUnique({
+    where: { schoolId_year_month: { schoolId: user.schoolId, year, month } },
   });
 
   await logApiAction({ req, status: 200, userId: session.user.id });
@@ -66,11 +75,11 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { departmentId: true },
+    select: { schoolId: true },
   });
-  if (!user?.departmentId) {
+  if (!user?.schoolId) {
     await logApiAction({ req, status: 400, userId: session.user.id });
-    return json({ error: "NO_DEPARTMENT" }, { status: 400, req });
+    return json({ error: "NO_SCHOOL" }, { status: 400, req });
   }
 
   const contentJson =
@@ -78,23 +87,24 @@ export async function POST(req: Request) {
       ? Prisma.JsonNull
       : (parsed.data.contentJson as Prisma.InputJsonValue);
 
-  const plan = await prisma.workPlan.upsert({
+  const plan = await prisma.monthlyReport.upsert({
     where: {
-      ownerId_year_month: {
-        ownerId: session.user.id,
+      schoolId_year_month: {
+        schoolId: user.schoolId,
         year: parsed.data.year,
         month: parsed.data.month,
       },
     },
     create: {
-      ownerId: session.user.id,
-      departmentId: user.departmentId,
+      schoolId: user.schoolId,
       year: parsed.data.year,
       month: parsed.data.month,
       contentJson,
+      createdById: session.user.id,
     },
     update: {
       contentJson,
+      createdById: session.user.id,
     },
   });
 
@@ -108,3 +118,5 @@ export async function POST(req: Request) {
   await logApiAction({ req, status: 200, userId: session.user.id });
   return json({ ok: true, plan }, { req });
 }
+
+

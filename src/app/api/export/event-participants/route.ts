@@ -9,18 +9,32 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const eventId = searchParams.get("eventId") ?? "";
-  const departmentId = searchParams.get("departmentId") ?? "";
-  if (!eventId || !departmentId) {
+  const schoolId = searchParams.get("schoolId") ?? "";
+  if (!eventId || !schoolId) {
     return NextResponse.json({ error: "INVALID_QUERY" }, { status: 400 });
   }
 
   const rows = await prisma.eventParticipation.findMany({
     where: {
       eventId,
-      user: { departmentId },
+      user: { schoolId },
     },
     include: {
-      user: { select: { email: true, firstName: true, lastName: true, middleName: true, dateOfBirth: true } },
+      user: {
+        select: {
+          email: true,
+          rosterEntries: {
+            where: { schoolId },
+            select: {
+              firstName: true,
+              lastName: true,
+              middleName: true,
+              dateOfBirth: true,
+            },
+            take: 1,
+          },
+        },
+      },
     },
     orderBy: [{ prizePlace: "asc" }, { ratingPoints: "desc" }],
   });
@@ -29,11 +43,12 @@ export async function GET(req: Request) {
   const ws = wb.addWorksheet("Rating");
   ws.addRow(["Email", "ФИО", "Дата рождения", "Статус", "Призовое место", "Баллы"]);
   for (const p of rows) {
-    const fio = `${p.user.lastName} ${p.user.firstName} ${p.user.middleName ?? ""}`.trim();
+    const roster = p.user.rosterEntries?.[0];
+    const fio = roster ? `${roster.lastName} ${roster.firstName} ${roster.middleName ?? ""}`.trim() : "";
     ws.addRow([
       p.user.email,
       fio,
-      p.user.dateOfBirth ?? "",
+      roster?.dateOfBirth ?? "",
       p.status,
       p.prizePlace ?? "",
       p.ratingPoints ?? "",
@@ -49,4 +64,10 @@ export async function GET(req: Request) {
     },
   });
 }
+
+
+
+
+
+
 

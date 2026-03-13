@@ -1,8 +1,10 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import {
 import { safeAuth } from "@/lib/auth-safe";
+import {
   cancelEventAction,
   createEnterpriseEventAction,
+  deleteCancelledEventAction,
   rescheduleEventAction,
 } from "./actions";
 
@@ -20,13 +22,21 @@ export default async function EventsPage() {
   const session = await safeAuth();
   if (!session?.user) return null;
 
-  const events: EventRow[] =
-    session.user.role === "ADMIN"
-      ? await prisma.event.findMany({ orderBy: { startsAt: "asc" } })
-      : await prisma.event.findMany({
-          where: { departmentId: null },
-          orderBy: { startsAt: "asc" },
-        });
+  const role = session.user.role;
+  const getEvents = unstable_cache(
+    async () => {
+      return role === "MAIN_APZ_ADMIN"
+        ? prisma.event.findMany({ orderBy: { startsAt: "asc" } })
+        : prisma.event.findMany({
+            where: { schoolId: null },
+            orderBy: { startsAt: "asc" },
+          });
+    },
+    [`events:${role}`],
+    { revalidate: 60 },
+  );
+
+  const events = (await getEvents()) as EventRow[];
 
   const now = new Date();
   const year = now.getFullYear();
@@ -57,7 +67,7 @@ export default async function EventsPage() {
           Сотрудники видят только общие мероприятия предприятия.
         </p>
 
-        {session.user.role === "ADMIN" ? (
+        {session.user.role === "MAIN_APZ_ADMIN" ? (
           <div className="mt-6 rounded-xl border border-zinc-200 p-4">
             <div className="font-medium">Создать мероприятие предприятия</div>
             <form
@@ -89,7 +99,8 @@ export default async function EventsPage() {
                 Дата/время (ISO)
                 <input
                   name="startsAt"
-                  placeholder="2026-03-12T10:00:00.000Z"
+                  type="datetime-local"
+                  step={60}
                   className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none ring-zinc-400 focus:ring-2"
                   required
                 />
@@ -133,8 +144,15 @@ export default async function EventsPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-zinc-500">{e.status}</div>
-                  {session.user.role === "ADMIN" ? (
+                  {session.user.role === "MAIN_APZ_ADMIN" ? (
                     <div className="mt-2 flex flex-wrap justify-end gap-2">
+                      {e.status === "CANCELLED" ? (
+                        <form action={deleteCancelledEventAction.bind(null, e.id)}>
+                          <button className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-900 hover:bg-rose-100">
+                            Удалить
+                          </button>
+                        </form>
+                      ) : null}
                       {e.status !== "CANCELLED" ? (
                         <form
                           action={async () => {
@@ -159,7 +177,8 @@ export default async function EventsPage() {
                         >
                           <input
                             name="startsAt"
-                            placeholder="new ISO date"
+                            type="datetime-local"
+                            step={60}
                             className="w-44 rounded-md border border-zinc-200 px-2 py-1 text-xs"
                           />
                           <button className="rounded-md border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-50">
@@ -181,3 +200,4 @@ export default async function EventsPage() {
     </div>
   );
 }
+

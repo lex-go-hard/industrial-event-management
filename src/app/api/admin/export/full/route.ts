@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     await logApiAction({ req, status: 401, userId: null });
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  if (session.user.role !== "ADMIN") {
+  if (session.user.role !== "MAIN_APZ_ADMIN") {
     await logApiAction({ req, status: 403, userId: session.user.id });
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
@@ -32,58 +32,50 @@ export async function GET(req: Request) {
 
   // Collect data (avoid secrets)
   const [
-    departments,
+    schools,
     users,
     events,
     participations,
-    workPlans,
     notifications,
     auditLogs,
     apiLogs,
     roster,
-    ratingUploads,
     quarterlyImports,
   ] = await Promise.all([
-    prisma.department.findMany(),
+    prisma.school.findMany(),
     prisma.user.findMany({
       select: {
         id: true,
         email: true,
-        employeeNo: true,
         role: true,
-        departmentId: true,
-        firstName: true,
-        lastName: true,
-        middleName: true,
-        dateOfBirth: true,
+        schoolId: true,
+        isApproved: true,
+        createdById: true,
+        deletedAt: true,
         createdAt: true,
         updatedAt: true,
       },
     }),
     prisma.event.findMany(),
     prisma.eventParticipation.findMany(),
-    prisma.workPlan.findMany(),
     prisma.notification.findMany(),
     prisma.auditLog.findMany(),
     prisma.apiActionLog.findMany({ orderBy: { createdAt: "desc" }, take: 5000 }),
     prisma.rosterEntry.findMany(),
-    prisma.ratingUploadLog.findMany(),
     prisma.quarterlyReminderImport.findMany(),
   ]);
 
   archive.append(JSON.stringify({ exportedAt: new Date().toISOString(), baseUrl: url.origin }, null, 2), {
     name: "meta.json",
   });
-  archive.append(JSON.stringify(departments, null, 2), { name: "departments.json" });
+  archive.append(JSON.stringify(schools, null, 2), { name: "schools.json" });
   archive.append(JSON.stringify(users, null, 2), { name: "users.json" });
   archive.append(JSON.stringify(events, null, 2), { name: "events.json" });
   archive.append(JSON.stringify(participations, null, 2), { name: "event_participations.json" });
-  archive.append(JSON.stringify(workPlans, null, 2), { name: "work_plans.json" });
   archive.append(JSON.stringify(notifications, null, 2), { name: "notifications.json" });
   archive.append(JSON.stringify(auditLogs, null, 2), { name: "audit_logs.json" });
   archive.append(JSON.stringify(apiLogs, null, 2), { name: "api_action_logs.json" });
   archive.append(JSON.stringify(roster, null, 2), { name: "roster_entries.json" });
-  archive.append(JSON.stringify(ratingUploads, null, 2), { name: "rating_upload_logs.json" });
   archive.append(JSON.stringify(quarterlyImports, null, 2), { name: "quarterly_imports.json" });
 
   archive.finalize();
@@ -98,4 +90,5 @@ export async function GET(req: Request) {
     },
   });
 }
+
 

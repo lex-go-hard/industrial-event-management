@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 type Notification = {
@@ -13,17 +13,24 @@ type Notification = {
 
 export function NotificationsWidget() {
   const [items, setItems] = useState<Notification[]>([]);
-  const [lastTs, setLastTs] = useState<string | null>(null);
+  const lastTsRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function tick() {
-      const qs = lastTs ? `?since=${encodeURIComponent(lastTs)}` : "";
+      if (document.hidden) {
+        if (!cancelled) setTimeout(tick, 30000);
+        return;
+      }
+
+      const qs = lastTsRef.current
+        ? `?since=${encodeURIComponent(lastTsRef.current)}`
+        : "";
       const res = await fetch(`/api/notifications${qs}`, {
         cache: "no-store",
       }).catch(() => null);
       if (!res || !res.ok) {
-        if (!cancelled) setTimeout(tick, 15000);
+        if (!cancelled) setTimeout(tick, 30000);
         return;
       }
       const data = (await res.json()) as {
@@ -36,15 +43,15 @@ export function NotificationsWidget() {
           const merged = [...data.notifications, ...prev.filter((n) => !existingIds.has(n.id))];
           return merged.slice(0, 50);
         });
-        setLastTs(data.now);
-        setTimeout(tick, 10000);
+        lastTsRef.current = data.now;
+        setTimeout(tick, 20000);
       }
     }
     tick();
     return () => {
       cancelled = true;
     };
-  }, [lastTs]);
+  }, []);
 
   return (
     <div className="space-y-3">

@@ -7,12 +7,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const loginTimeoutMs = 8000;
 
   return (
     <form
@@ -21,19 +22,45 @@ export function LoginForm() {
         e.preventDefault();
         setError(null);
         setLoading(true);
-        const res = await signIn("credentials", {
-          email,
-          password,
-          redirect: false,
-          callbackUrl,
-        });
-        setLoading(false);
+        try {
+          const res = (await Promise.race([
+            signIn("credentials", {
+              email,
+              password,
+              redirect: false,
+              callbackUrl,
+            }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), loginTimeoutMs)),
+          ])) as Awaited<ReturnType<typeof signIn>> | null;
 
-        if (!res || res.error) {
-          setError("Неверный email или пароль");
-          return;
+          if (!res) {
+            setError("Сервер авторизации не отвечает. Попробуйте еще раз.");
+            return;
+          }
+
+          if (res.error) {
+            if (res?.error === "USER_NOT_FOUND") {
+              setError("Пользователь с таким email не найден");
+            } else if (res?.error === "INVALID_PASSWORD") {
+              setError("Неверный пароль");
+            } else {
+              setError("Не удалось войти. Проверьте email и пароль.");
+            }
+            return;
+          }
+          const target = res.url ?? callbackUrl;
+          router.replace(target);
+          window.setTimeout(() => {
+            if (window.location.pathname !== target) {
+              window.location.assign(target);
+            }
+          }, 300);
+        } catch (err) {
+          console.error("Login failed:", err);
+          setError("Не удалось войти. Попробуйте еще раз.");
+        } finally {
+          setLoading(false);
         }
-        router.push(res.url ?? callbackUrl);
       }}
     >
       <label className="block text-sm font-medium">
@@ -76,4 +103,3 @@ export function LoginForm() {
     </form>
   );
 }
-

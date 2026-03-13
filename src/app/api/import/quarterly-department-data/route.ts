@@ -11,7 +11,7 @@ import { safeAuth } from "@/lib/auth-safe";
 const rowSchema = z.record(z.string(), z.string().nullable().optional());
 
 const payloadSchema = z.object({
-  departmentId: z.string().min(1),
+  schoolId: z.string().min(1),
   year: z.number().int().min(2000).max(2100),
   quarter: z.number().int().min(1).max(4),
   rows: z.array(rowSchema).min(1),
@@ -91,17 +91,17 @@ export async function POST(req: Request) {
     await logApiAction({ req, status: 401, userId: null });
     return json({ error: "UNAUTHORIZED" }, { status: 401, req });
   }
-  if (session.user.role !== "ADMIN" && session.user.role !== "DEPARTMENT_HEAD") {
+  if (session.user.role !== "MAIN_APZ_ADMIN" && session.user.role !== "ZAVUCH") {
     await logApiAction({ req, status: 403, userId: session.user.id });
     return json({ error: "FORBIDDEN" }, { status: 403, req });
   }
 
   const { searchParams } = new URL(req.url);
-  const departmentId = searchParams.get("departmentId") ?? "";
+  const schoolId = searchParams.get("schoolId") ?? "";
   const year = Number(searchParams.get("year"));
   const quarter = Number(searchParams.get("quarter"));
 
-  if (!departmentId || !Number.isFinite(year) || !Number.isFinite(quarter)) {
+  if (!schoolId || !Number.isFinite(year) || !Number.isFinite(quarter)) {
     await logApiAction({ req, status: 400, userId: session.user.id });
     return json({ error: "INVALID_QUERY" }, { status: 400, req });
   }
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
     ext.endsWith(".xlsx") ? await parseExcel(file) : ext.endsWith(".docx") ? await parseWord(file) : [];
 
   const parsed = payloadSchema.safeParse({
-    departmentId,
+    schoolId,
     year,
     quarter,
     rows,
@@ -131,18 +131,24 @@ export async function POST(req: Request) {
   const contentJson: Prisma.InputJsonValue = {
     sourceFile: file.name,
     rows: parsed.data.rows,
+    uploadedBy: session.user
+      ? {
+          id: session.user.id,
+          role: session.user.role,
+        }
+      : null,
   };
 
   const record = await prisma.quarterlyReminderImport.upsert({
     where: {
-      departmentId_year_quarter: {
-        departmentId,
+      schoolId_year_quarter: {
+        schoolId,
         year,
         quarter,
       },
     },
     create: {
-      departmentId,
+      schoolId,
       year,
       quarter,
       createdById: session.user.id,
@@ -165,3 +171,5 @@ export async function POST(req: Request) {
 export async function OPTIONS(req: Request) {
   return handleCors(req) ?? new NextResponse(null, { status: 204 });
 }
+
+

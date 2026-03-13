@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { saveWorkPlanAction } from "./actions";
 import type { Prisma } from "@prisma/client";
@@ -8,15 +9,25 @@ export const dynamic = "force-dynamic";
 export default async function WorkPlansPage() {
   const session = await safeAuth();
   const userId = session?.user?.id;
+  const schoolId = session?.user?.schoolId ?? null;
   if (!userId) return null;
 
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const plan = await prisma.workPlan.findUnique({
-    where: { ownerId_year_month: { ownerId: userId, year, month } },
-  });
+  const getPlan = unstable_cache(
+    async () => {
+      if (!schoolId) return null;
+      return prisma.monthlyReport.findUnique({
+        where: { schoolId_year_month: { schoolId, year, month } },
+      });
+    },
+    [`work-plan:${schoolId ?? "none"}:${year}-${month}`],
+    { revalidate: 60 },
+  );
+
+  const plan = await getPlan();
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900">
@@ -43,33 +54,41 @@ export default async function WorkPlansPage() {
           Видно только вам. Месяц по умолчанию: {month}.{year}
         </p>
 
-        <form
-          action={async (formData) => {
-            "use server";
-            const contentText = String(formData.get("content") ?? "{}");
-            let contentJson: Prisma.InputJsonValue = {};
-            try {
-              contentJson = JSON.parse(contentText) as Prisma.InputJsonValue;
-            } catch {
-              contentJson = { text: contentText };
-            }
-            await saveWorkPlanAction({ year, month, contentJson });
-          }}
-          className="mt-6 space-y-3"
-        >
-          <label className="block text-sm font-medium">
-            Контент (JSON)
-            <textarea
-              name="content"
-              className="mt-1 h-56 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-xs outline-none ring-zinc-400 focus:ring-2"
-              defaultValue={plan ? JSON.stringify(plan.contentJson, null, 2) : "{\n  \"items\": []\n}"}
-            />
-          </label>
+        {!schoolId ? (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Ваш человек не привязан к школе. План доступен после привязки.
+          </div>
+        ) : null}
 
-          <button className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
-            Сохранить
-          </button>
-        </form>
+        {schoolId ? (
+          <form
+            action={async (formData) => {
+              "use server";
+              const contentText = String(formData.get("content") ?? "{}");
+              let contentJson: Prisma.InputJsonValue = {};
+              try {
+                contentJson = JSON.parse(contentText) as Prisma.InputJsonValue;
+              } catch {
+                contentJson = { text: contentText };
+              }
+              await saveWorkPlanAction({ year, month, contentJson });
+            }}
+            className="mt-6 space-y-3"
+          >
+            <label className="block text-sm font-medium">
+              Контент (JSON)
+              <textarea
+                name="content"
+                className="mt-1 h-56 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-xs outline-none ring-zinc-400 focus:ring-2"
+                defaultValue={plan ? JSON.stringify(plan.contentJson, null, 2) : "{\n  \"items\": []\n}"}
+              />
+            </label>
+
+            <button className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+              Схранить
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

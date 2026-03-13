@@ -31,9 +31,9 @@ export async function GET(req: Request) {
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0));
 
   const where =
-    session.user.role === "ADMIN"
+    session.user.role === "MAIN_APZ_ADMIN"
       ? { startsAt: { gte: start, lt: end } }
-      : { departmentId: null, startsAt: { gte: start, lt: end } };
+      : { schoolId: null, startsAt: { gte: start, lt: end } };
 
   const events = (await prisma.event.findMany({
     where,
@@ -47,8 +47,8 @@ export async function GET(req: Request) {
     for (const e of events) {
       ws.addRow([
         e.title,
-        e.startsAt.toISOString(),
-        e.endsAt ? e.endsAt.toISOString() : "",
+        new Date(e.startsAt).toISOString(),
+        e.endsAt ? new Date(e.endsAt).toISOString() : "",
         e.location ?? "",
         e.status,
       ]);
@@ -86,7 +86,7 @@ export async function GET(req: Request) {
               new Paragraph({
                 children: [
                   new TextRun({
-                    text: `- ${e.title} - ${e.startsAt.toLocaleString()} (${e.status})`,
+                    text: `- ${e.title} - ${new Date(e.startsAt).toLocaleString()} (${e.status})`,
                   }),
                 ],
               }),
@@ -105,3 +105,7 @@ export async function GET(req: Request) {
     },
   });
 }
+
+
+
+

@@ -3,10 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { notifyUsers } from "@/lib/services/notifications";
 import { enforceRateLimit, handleCors, json, logApiAction } from "@/lib/api/guard";
 
-type DepartmentHead = {
+type SchoolHead = {
   id: string;
   email: string;
-  department: { name: string; code: string } | null;
+  school: { name: string; apzCode: string | null } | null;
 };
 
 function currentQuarter(date = new Date()) {
@@ -38,13 +38,13 @@ export async function POST(req: Request) {
   const quarter = currentQuarter(now);
 
   const heads = (await prisma.user.findMany({
-    where: { role: "DEPARTMENT_HEAD" },
+    where: { role: "ZAVUCH" },
     select: {
       id: true,
       email: true,
-      department: { select: { name: true, code: true } },
+      school: { select: { name: true, apzCode: true } },
     },
-  })) as DepartmentHead[];
+  })) as SchoolHead[];
 
   if (!heads.length) {
     await logApiAction({ req, status: 200, userId: null });
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     "Просьба заполнить и обновить данные по мероприятиям, участникам и отчетам за прошедший квартал.";
 
   await notifyUsers({
-    userIds: heads.map((h: DepartmentHead) => h.id),
+    userIds: heads.map((h: SchoolHead) => h.id),
     type: "QUARTERLY_REMINDER",
     title,
     body,

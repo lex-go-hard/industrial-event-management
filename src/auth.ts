@@ -4,11 +4,12 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
-type Role = "ADMIN" | "DEPARTMENT_HEAD" | "EMPLOYEE";
+type Role = "MAIN_APZ_ADMIN" | "ZAVUCH" | "CLASS_TEACHER";
 
 type AppUserClaims = {
   role: Role;
-  departmentId: string | null;
+  schoolId: string | null;
+  isApproved?: boolean | null;
 };
 
 const credentialsSchema = z.object({
@@ -34,21 +35,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: {
             id: true,
             email: true,
-            passwordHash: true,
+            password: true,
             role: true,
-            departmentId: true,
+            schoolId: true,
+            isApproved: true,
+            deletedAt: true,
           },
         });
 
-        if (!user?.passwordHash) return null;
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        if (!user) throw new Error("USER_NOT_FOUND");
+        if (user.deletedAt) throw new Error("USER_DELETED");
+        if (!user.password) throw new Error("INVALID_PASSWORD");
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) throw new Error("INVALID_PASSWORD");
 
         return {
           id: user.id,
           email: user.email,
           role: user.role,
-          departmentId: user.departmentId,
+          schoolId: user.schoolId,
+          isApproved: user.isApproved,
         };
       },
     }),
@@ -59,15 +65,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.sub = user.id;
         const claims = user as unknown as Partial<AppUserClaims>;
         token.role = claims.role;
-        token.departmentId = claims.departmentId;
+        token.schoolId = claims.schoolId;
+        token.isApproved = typeof claims.isApproved === "boolean" ? claims.isApproved : null;
       }
       return token;
     },
     session: async ({ session, token }) => {
       if (token?.sub) session.user.id = token.sub;
       session.user.role = (token.role as Role | undefined) ?? undefined;
-      session.user.departmentId =
-        typeof token.departmentId === "string" ? token.departmentId : null;
+      session.user.schoolId =
+        typeof token.schoolId === "string" ? token.schoolId : null;
+      session.user.isApproved =
+        typeof token.isApproved === "boolean" ? token.isApproved : null;
       return session;
     },
   },

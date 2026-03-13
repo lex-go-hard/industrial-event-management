@@ -26,7 +26,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     await logApiAction({ req, status: 401, userId: null });
     return json({ error: "UNAUTHORIZED" }, { status: 401, req });
   }
-  if (session.user.role !== "ADMIN") {
+  if (session.user.role !== "MAIN_APZ_ADMIN") {
     await logApiAction({ req, status: 403, userId: session.user.id });
     return json({ error: "FORBIDDEN" }, { status: 403, req });
   }
@@ -74,11 +74,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       userIds,
       type: "EVENT_CANCELLED",
       title: "Мероприятие отменено",
-      body: `${next.title} (${before.startsAt.toLocaleString()})`,
+      body: `${next.title} (${new Date(before.startsAt).toLocaleString()})`,
       data: { eventId: next.id },
       email: {
         subject: `Отмена мероприятия: ${next.title}`,
-        text: `Отменено мероприятие предприятия: ${next.title}\nБыло: ${before.startsAt.toLocaleString()}`,
+        text: `Отменено мероприятие предприятия: ${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}`,
       },
     });
   } else if (rescheduled && !isCancelled) {
@@ -86,11 +86,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       userIds,
       type: "EVENT_RESCHEDULED",
       title: "Мероприятие перенесено",
-      body: `${next.title}\nБыло: ${before.startsAt.toLocaleString()}\nСтало: ${next.startsAt.toLocaleString()}`,
+      body: `${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}\nСтало: ${new Date(next.startsAt).toLocaleString()}`,
       data: { eventId: next.id },
       email: {
         subject: `Перенос мероприятия: ${next.title}`,
-        text: `Мероприятие перенесено: ${next.title}\nБыло: ${before.startsAt.toLocaleString()}\nСтало: ${next.startsAt.toLocaleString()}`,
+        text: `Мероприятие перенесено: ${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}\nСтало: ${new Date(next.startsAt).toLocaleString()}`,
       },
     });
   }
@@ -102,3 +102,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 export async function OPTIONS(req: Request) {
   return handleCors(req) ?? new Response(null, { status: 204 });
 }
+
+
+

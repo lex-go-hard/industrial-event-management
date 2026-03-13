@@ -5,7 +5,7 @@ import { safeAuth } from "@/lib/auth-safe";
 export default async function AdminUserImportPage() {
   const session = await safeAuth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/");
+  if (session.user.role !== "MAIN_APZ_ADMIN") redirect("/");
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900">
@@ -14,7 +14,7 @@ export default async function AdminUserImportPage() {
           Массовое добавление пользователей (Excel)
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Загрузите .xlsx с колонками: Email, Password (optional), DepartmentCode, Role (optional).
+          Загрузите .xlsx с колонками: Email, Password (optional), APZCode, Role (optional).
         </p>
         <div className="mt-6">
           <ExcelImportForm />
@@ -23,4 +23,5 @@ export default async function AdminUserImportPage() {
     </div>
   );
 }
+
 

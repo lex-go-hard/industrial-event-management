@@ -8,9 +8,9 @@ datasource db {
 }
 
 enum Role {
-  ADMIN
-  DEPARTMENT_HEAD
-  EMPLOYEE
+  MAIN_APZ_ADMIN
+  ZAVUCH
+  CLASS_TEACHER
 }
 
 enum EventStatus {
@@ -34,79 +34,88 @@ enum RosterEntryType {
   STUDENT
 }
 
-enum RatingUploadStatus {
-  PENDING
-  PROCESSING
-  SUCCESS
-  FAILED
+enum StudentAchievementType {
+  OLYMPIAD_PARTICIPATION
+  AWARD
+  EVENT_PARTICIPATION
+  RESEARCH_WORK
+  EXTRA_EDUCATION
+  FIRST_PROFESSION
+  OTHER
 }
 
-model Department {
-  id          String  @id @default(cuid())
-  code        String  @unique
-  name        String
-  description String?
+enum AdditionalEventLevel {
+  MUNICIPAL
+  REGIONAL
+  INTERREGIONAL
+  ALL_RUSSIAN
+}
 
-  headUserId String?
-  headUser   User?   @relation("DepartmentHead", fields: [headUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-
-  users  User[]  @relation("UserDepartment")
-  events Event[]
-
-  workPlans      WorkPlan[]
-  monthlyReports MonthlyReport[]
-
-  rosterEntries    RosterEntry[]
-  ratingUploadLogs RatingUploadLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-  @@index([headUserId])
+enum AdditionalEventFormat {
+  OFFLINE
+  ONLINE
+  HYBRID
 }
 
 model User {
-  id         String  @id @default(cuid())
-  email      String  @unique
-  employeeNo String? @unique
+  id       String @id @default(cuid())
+  email    String @unique
+  password String @map("passwordHash")
 
-  passwordHash String?
+  role Role
 
-  // Encrypted at rest via Prisma middleware:
-  lastName    String
-  firstName   String
-  middleName  String?
-  dateOfBirth String?
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  role Role @default(EMPLOYEE)
+  isApproved Boolean @default(false)
 
-  departmentId String?
-  department   Department? @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdById String?
+  createdBy   User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdUsers User[] @relation("UserCreatedBy")
 
-  headedDepartments Department[] @relation("DepartmentHead")
+  deletedAt DateTime?
 
   createdEvents  Event[]              @relation("EventCreatedBy")
   participations EventParticipation[]
 
   rosterEntries RosterEntry[]
-
-  workPlans WorkPlan[]
   monthlyReportsAuthored MonthlyReport[] @relation("MonthlyReportAuthor")
-
-  ratingUploads RatingUploadLog[] @relation("RatingUploadBy")
 
   auditLogs AuditLog[]
   notifications Notification[]
   quarterlyReminderImports QuarterlyReminderImport[]
   apiActionLogs ApiActionLog[]
 
+  schoolClassesTaught SchoolClass[] @relation("SchoolClassTeacher")
+  confirmationRequests ConfirmationRequest[] @relation("ConfirmationRequestUser")
+  confirmationRequestsReviewed ConfirmationRequest[] @relation("ConfirmationRequestReviewedBy")
+  confirmationRequestsRequested ConfirmationRequest[] @relation("ConfirmationRequestRequestedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([departmentId])
+  @@index([schoolId])
   @@index([role])
-  @@index([lastName, firstName])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model RegistrationVerification {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  schoolId     String?
+  role         Role     @default(CLASS_TEACHER)
+  codeHash     String
+  attempts     Int      @default(0)
+  lastSentAt   DateTime
+  expiresAt    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@index([lastSentAt])
 }
 
 model Event {
@@ -119,8 +128,8 @@ model Event {
   startsAt DateTime
   endsAt   DateTime?
 
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   createdById String
   createdBy   User   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -130,7 +139,7 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([departmentId, startsAt])
+  @@index([schoolId, startsAt])
   @@index([createdById, startsAt])
   @@index([status, startsAt])
 }
@@ -157,32 +166,9 @@ model EventParticipation {
   @@index([eventId, prizePlace])
 }
 
-model WorkPlan {
-  id String @id @default(cuid())
-
-  ownerId String
-  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  month Int
-  year  Int
-
-  // Freeform plan content / serialized JSON
-  contentJson Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([ownerId, year, month])
-  @@index([departmentId, year, month])
-  @@index([year, month])
-}
-
 model MonthlyReport {
   id           String @id @default(cuid())
-  departmentId String
+  schoolId String
   month        Int
   year         Int
 
@@ -192,20 +178,20 @@ model MonthlyReport {
   createdById String?
   createdBy   User?   @relation("MonthlyReportAuthor", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([departmentId, year, month])
+  @@unique([schoolId, year, month])
   @@index([year, month])
   @@index([createdById])
 }
 
-/// Student/EmployeeList: roster of people tied to departments (can be linked to a User or be external).
+/// Student/EmployeeList: roster of people tied to schools (can be linked to a User or be external).
 model RosterEntry {
   id           String          @id @default(cuid())
-  departmentId String
+  schoolId     String
   type         RosterEntryType @default(EMPLOYEE)
 
   // Optional link to a real user account.
@@ -218,7 +204,7 @@ model RosterEntry {
   middleName  String?
   dateOfBirth String?
 
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   activeFrom DateTime? // e.g. employment/student start
   activeTo   DateTime?
@@ -226,40 +212,10 @@ model RosterEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([departmentId, userId], map: "roster_department_user_unique")
-  @@index([departmentId, type])
+  @@unique([schoolId, userId], map: "roster_school_user_unique")
+  @@index([schoolId, type])
   @@index([lastName, firstName])
   @@index([userId])
-}
-
-model RatingUploadLog {
-  id           String  @id @default(cuid())
-  departmentId String?
-  uploadedById String?
-
-  month Int?
-  year  Int?
-
-  status         RatingUploadStatus @default(PENDING)
-  sourceFilename String?
-
-  totalRows    Int?    @default(0)
-  successRows  Int?    @default(0)
-  failedRows   Int?    @default(0)
-  errorMessage String?
-
-  // Storage reference (S3 path, local path, etc.)
-  storageKey String?
-
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  uploadedBy User?       @relation("RatingUploadBy", fields: [uploadedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([departmentId, year, month])
-  @@index([uploadedById, createdAt])
-  @@index([status, createdAt])
 }
 
 model AuditLog {
@@ -312,7 +268,7 @@ model Notification {
 model QuarterlyReminderImport {
   id String @id @default(cuid())
 
-  departmentId String
+  schoolId String
   year         Int
   quarter      Int
 
@@ -320,10 +276,11 @@ model QuarterlyReminderImport {
 
   createdById String?
   createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  school      School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   createdAt DateTime @default(now())
 
-  @@unique([departmentId, year, quarter])
+  @@unique([schoolId, year, quarter])
   @@index([year, quarter])
 }
 
@@ -344,4 +301,222 @@ model ApiActionLog {
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([path, createdAt])
+}
+
+model School {
+  id      String @id @default(cuid())
+  name    String
+  region  String?
+  apzCode String?
+  address String?
+  extraInfo String?
+
+  classes       SchoolClass[]
+  profileClasses ProfileClass[]
+  users User[]
+  rosterEntries RosterEntry[]
+  events Event[]
+  monthlyReports MonthlyReport[]
+  quarterlyReminderImports QuarterlyReminderImport[]
+  additionalEvents AdditionalEvent[]
+  confirmationRequests ConfirmationRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([apzCode])
+  @@index([region])
+}
+
+model SchoolClass {
+  id         String  @id @default(cuid())
+  name       String
+  gradeLevel Int?
+
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  classTeacherId String?
+  classTeacher   User?  @relation("SchoolClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  profileClassId String?
+  profileClass   ProfileClass? @relation(fields: [profileClassId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  students Student[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId, gradeLevel])
+  @@index([classTeacherId])
+  @@index([profileClassId])
+}
+
+model Student {
+  id         String  @id @default(cuid())
+  lastName   String
+  firstName  String
+  middleName String?
+  dateOfBirth String?
+
+  schoolClassId String
+  schoolClass   SchoolClass @relation(fields: [schoolClassId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  achievements       StudentAchievement[]
+  researchWorks      StudentNIR[]
+  extraPrograms      ExtraEducationProgram[]
+  firstProfessions   FirstProfession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolClassId])
+  @@index([lastName, firstName])
+}
+
+model ProfileClass {
+  id            String  @id @default(cuid())
+  name          String
+  formationYear Int
+  studentCount  Int
+  gradeLevel    Int?
+
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  classes SchoolClass[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([formationYear])
+}
+
+model StudentAchievement {
+  id        String @id @default(cuid())
+  type      StudentAchievementType
+  studentId String
+
+  eventName   String?
+  date        DateTime?
+  result      String?
+  place       String?
+  organizer   String?
+  documentUrl String?
+  comment     String?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, type])
+  @@index([date])
+}
+
+model StudentNIR {
+  id        String @id @default(cuid())
+  studentId String
+  title     String
+  publicationInfo String
+  date      DateTime?
+  conferenceName String?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([date])
+}
+
+model ExtraEducationProgram {
+  id            String @id @default(cuid())
+  studentId     String
+  programName   String
+  organization  String
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([periodStart, periodEnd])
+}
+
+model FirstProfession {
+  id            String @id @default(cuid())
+  studentId     String
+  eduOrg        String
+  programName   String
+  periodStart   DateTime
+  periodEnd     DateTime
+  documentType  String
+  documentNumber String?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([periodStart, periodEnd])
+}
+
+model AdditionalEvent {
+  id               String @id @default(cuid())
+  schoolId         String
+  date             DateTime
+  name             String
+  organizer        String
+  level            AdditionalEventLevel
+  format           AdditionalEventFormat
+  participantsCount Int
+  targetClasses    String?
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([schoolId])
+  @@index([level])
+  @@index([format])
+}
+
+enum ConfirmationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ConfirmationRequest {
+  id String @id @default(cuid())
+  userId String
+  requestedById String?
+  status ConfirmationRequestStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt DateTime?
+  schoolId String
+
+  user User @relation("ConfirmationRequestUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  requestedBy User? @relation("ConfirmationRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reviewedBy User? @relation("ConfirmationRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([requestedById])
+  @@index([reviewedById])
+  @@index([status])
+  @@index([schoolId])
 }

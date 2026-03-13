@@ -5,7 +5,8 @@ declare module "next-auth" {
     user: {
       id: string;
       role?: string;
-      departmentId?: string | null;
+      schoolId?: string | null;
+      isApproved?: boolean | null;
     } & DefaultSession["user"];
   }
 }

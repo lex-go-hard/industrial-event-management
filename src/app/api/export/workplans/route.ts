@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
 import { Document, Packer, Paragraph, TextRun } from "docx";
@@ -19,16 +20,40 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "INVALID_QUERY" }, { status: 400 });
   }
 
-  // Only own plan (ADMIN can still export own; enterprise export can be added later)
-  const plan = await prisma.workPlan.findUnique({
-    where: { ownerId_year_month: { ownerId: session.user.id, year, month } },
-  });
+  const getUser = unstable_cache(
+    async () => {
+      return prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { schoolId: true },
+      });
+    },
+    [`export-workplans:user:${session.user.id}`],
+    { revalidate: 300 },
+  );
+
+  const user = await getUser();
+  if (!user?.schoolId) {
+    return NextResponse.json({ error: "NO_SCHOOL" }, { status: 400 });
+  }
+
+  const getPlan = unstable_cache(
+    async () => {
+      return prisma.monthlyReport.findUnique({
+        where: { schoolId_year_month: { schoolId: user.schoolId!, year, month } },
+      });
+    },
+    [`export-workplans:${user.schoolId}:${year}-${month}`],
+    { revalidate: 300 },
+  );
+
+  // School monthly report (used as work plan)
+  const plan = await getPlan();
 
   if (format === "xlsx") {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("WorkPlan");
-    ws.addRow(["Месяц", "Год", "OwnerId"]);
-    ws.addRow([month, year, session.user.id]);
+    ws.addRow(["Месяц", "Год", "SchoolId"]);
+    ws.addRow([month, year, user.schoolId]);
     ws.addRow([]);
     ws.addRow(["Content (JSON)"]);
     ws.addRow([plan ? JSON.stringify(plan.contentJson) : ""]);
@@ -84,4 +109,5 @@ export async function GET(req: Request) {
     },
   });
 }
+
 

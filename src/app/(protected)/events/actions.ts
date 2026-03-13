@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { notifyUsers } from "@/lib/services/notifications";
 import { safeAuth } from "@/lib/auth-safe";
@@ -16,7 +17,7 @@ export async function createEnterpriseEventAction(params: {
 }) {
   const session = await safeAuth();
   if (!session?.user) throw new Error("UNAUTHORIZED");
-  if (session.user.role !== "ADMIN") throw new Error("FORBIDDEN");
+  if (session.user.role !== "MAIN_APZ_ADMIN") throw new Error("FORBIDDEN");
 
   const event = await prisma.event.create({
     data: {
@@ -26,7 +27,7 @@ export async function createEnterpriseEventAction(params: {
       startsAt: new Date(params.startsAt),
       endsAt: params.endsAt ? new Date(params.endsAt) : null,
       status: "PLANNED",
-      departmentId: null,
+      schoolId: null,
       createdById: session.user.id,
     },
   });
@@ -36,21 +37,22 @@ export async function createEnterpriseEventAction(params: {
     userIds: users.map((u: UserIdRow) => u.id),
     type: "EVENT_CREATED",
     title: "Новое мероприятие предприятия",
-    body: `${event.title} (${event.startsAt.toLocaleString()})`,
+    body: `${event.title} (${new Date(event.startsAt).toLocaleString()})`,
     data: { eventId: event.id },
     email: {
       subject: `Новое мероприятие: ${event.title}`,
-      text: `Создано мероприятие предприятия: ${event.title}\nДата/время: ${event.startsAt.toLocaleString()}`,
+      text: `Создано мероприятие предприятия: ${event.title}\nДата/время: ${new Date(event.startsAt).toLocaleString()}`,
     },
   });
 
   revalidatePath("/events");
+  redirect("/events");
 }
 
 export async function cancelEventAction(eventId: string) {
   const session = await safeAuth();
   if (!session?.user) throw new Error("UNAUTHORIZED");
-  if (session.user.role !== "ADMIN") throw new Error("FORBIDDEN");
+  if (session.user.role !== "MAIN_APZ_ADMIN") throw new Error("FORBIDDEN");
 
   const before = await prisma.event.findUnique({ where: { id: eventId } });
   if (!before) throw new Error("NOT_FOUND");
@@ -65,21 +67,22 @@ export async function cancelEventAction(eventId: string) {
     userIds: users.map((u: UserIdRow) => u.id),
     type: "EVENT_CANCELLED",
     title: "Мероприятие отменено",
-    body: `${next.title} (${before.startsAt.toLocaleString()})`,
+    body: `${next.title} (${new Date(before.startsAt).toLocaleString()})`,
     data: { eventId: next.id },
     email: {
       subject: `Отмена мероприятия: ${next.title}`,
-      text: `Отменено мероприятие предприятия: ${next.title}\nБыло: ${before.startsAt.toLocaleString()}`,
+      text: `Отменено мероприятие предприятия: ${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}`,
     },
   });
 
   revalidatePath("/events");
+  redirect("/events");
 }
 
 export async function rescheduleEventAction(eventId: string, startsAt: string) {
   const session = await safeAuth();
   if (!session?.user) throw new Error("UNAUTHORIZED");
-  if (session.user.role !== "ADMIN") throw new Error("FORBIDDEN");
+  if (session.user.role !== "MAIN_APZ_ADMIN") throw new Error("FORBIDDEN");
 
   const before = await prisma.event.findUnique({ where: { id: eventId } });
   if (!before) throw new Error("NOT_FOUND");
@@ -94,13 +97,31 @@ export async function rescheduleEventAction(eventId: string, startsAt: string) {
     userIds: users.map((u: UserIdRow) => u.id),
     type: "EVENT_RESCHEDULED",
     title: "Мероприятие перенесено",
-    body: `${next.title}\nБыло: ${before.startsAt.toLocaleString()}\nСтало: ${next.startsAt.toLocaleString()}`,
+    body: `${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}\nСтало: ${new Date(next.startsAt).toLocaleString()}`,
     data: { eventId: next.id },
     email: {
       subject: `Перенос мероприятия: ${next.title}`,
-      text: `Мероприятие перенесено: ${next.title}\nБыло: ${before.startsAt.toLocaleString()}\nСтало: ${next.startsAt.toLocaleString()}`,
+      text: `Мероприятие перенесено: ${next.title}\nБыло: ${new Date(before.startsAt).toLocaleString()}\nСтало: ${new Date(next.startsAt).toLocaleString()}`,
     },
   });
 
   revalidatePath("/events");
+  redirect("/events");
 }
+
+export async function deleteCancelledEventAction(eventId: string) {
+  const session = await safeAuth();
+  if (!session?.user) throw new Error("UNAUTHORIZED");
+  if (session.user.role !== "MAIN_APZ_ADMIN") throw new Error("FORBIDDEN");
+
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  if (!event) throw new Error("NOT_FOUND");
+  if (event.status !== "CANCELLED") throw new Error("NOT_CANCELLED");
+
+  await prisma.event.delete({ where: { id: eventId } });
+
+  revalidatePath("/events");
+  redirect("/events");
+}
+
+

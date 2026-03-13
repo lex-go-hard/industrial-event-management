@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { safeAuth } from "@/lib/auth-safe";
 
@@ -21,10 +22,6 @@ type Participation = {
 type RosterUser = {
   id: string;
   email: string;
-  dateOfBirth: string | null;
-  firstName: string;
-  lastName: string;
-  middleName: string | null;
 };
 
 type RosterEntry = {
@@ -47,7 +44,7 @@ type Row = {
   ratingPoints: number | null;
 };
 
-export default async function DepartmentEmployeesPage({
+export default async function SchoolEmployeesPage({
   params,
   searchParams,
 }: {
@@ -56,28 +53,28 @@ export default async function DepartmentEmployeesPage({
 }) {
   const session = await safeAuth();
   if (!session?.user) return null;
+  const allowed =
+    session.user.role === "MAIN_APZ_ADMIN" ||
+    (session.user.role === "ZAVUCH" && session.user.isApproved);
+  if (!allowed) redirect("/dashboard");
 
-  const { id: departmentId } = await params;
+  const { id: schoolId } = await params;
   const sp = await searchParams;
 
-  const department = await prisma.department.findUnique({
-    where: { id: departmentId },
-    select: { id: true, name: true, code: true },
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { id: true, name: true, apzCode: true },
   });
-  if (!department) return null;
+  if (!school) return null;
 
   const roster = (await prisma.rosterEntry.findMany({
-    where: { departmentId },
+    where: { schoolId },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: {
       user: {
         select: {
           id: true,
           email: true,
-          dateOfBirth: true,
-          firstName: true,
-          lastName: true,
-          middleName: true,
         },
       },
     },
@@ -113,7 +110,7 @@ export default async function DepartmentEmployeesPage({
         userId,
         email: u?.email ?? null,
         fio,
-        dob: r.dateOfBirth ?? u?.dateOfBirth ?? null,
+        dob: r.dateOfBirth ?? null,
         participant: !!p,
         prizePlace: p?.prizePlace ?? null,
         ratingPoints: p?.ratingPoints ?? null,
@@ -140,7 +137,7 @@ export default async function DepartmentEmployeesPage({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Сотрудники — {department.name} ({department.code})
+              Сотрудники — {school.name}{school.apzCode ? ` (${school.apzCode})` : ""}
             </h1>
             <p className="mt-1 text-sm text-zinc-600">
               Фильтры: участник/призовые/ФИО/дата рождения. Массовое заполнение —
@@ -151,7 +148,7 @@ export default async function DepartmentEmployeesPage({
             <div className="flex gap-2">
               <a
                 className="rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50"
-                href={`/api/export/event-participants?eventId=${eventId}&departmentId=${departmentId}`}
+                href={`/api/export/event-participants?eventId=${eventId}&schoolId=${schoolId}`}
               >
                 Экспорт рейтинга (Excel)
               </a>
@@ -261,3 +258,7 @@ export default async function DepartmentEmployeesPage({
     </div>
   );
 }
+
+
+
+

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { safeAuth } from "@/lib/auth-safe";
@@ -14,29 +15,32 @@ export async function saveWorkPlanAction(params: {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { departmentId: true },
+    select: { schoolId: true },
   });
-  if (!user?.departmentId) throw new Error("NO_DEPARTMENT");
+  if (!user?.schoolId) throw new Error("NO_SCHOOL");
 
-  await prisma.workPlan.upsert({
+  await prisma.monthlyReport.upsert({
     where: {
-      ownerId_year_month: {
-        ownerId: session.user.id,
+      schoolId_year_month: {
+        schoolId: user.schoolId,
         year: params.year,
         month: params.month,
       },
     },
     create: {
-      ownerId: session.user.id,
-      departmentId: user.departmentId,
+      schoolId: user.schoolId,
       year: params.year,
       month: params.month,
       contentJson: params.contentJson,
+      createdById: session.user.id,
     },
     update: {
       contentJson: params.contentJson,
+      createdById: session.user.id,
     },
   });
 
   revalidatePath("/work-plans");
+  redirect("/work-plans");
 }
+

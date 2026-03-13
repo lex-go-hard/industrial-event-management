@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Industrial Event Management
 
-## Getting Started
+Платформа для профориентации и отчётности по школьным программам: управление школами, профильными классами, мероприятиями и итоговой статистикой для АПЗ.
 
-First, run the development server:
+## Возможности
+
+- Ролевой доступ: `MAIN_APZ_ADMIN`, `ZAVUCH`, `CLASS_TEACHER`
+- Отчёты по профильным классам (импорт/экспорт)
+- Дашборды статистики по школам и классам
+- Подтверждение завучей и аудит действий
+
+## Быстрый старт
+
+1. Установите зависимости:
+
+```bash
+npm install
+```
+
+2. Создайте `.env` на основе `.env.example`.
+
+Минимально требуется:
+
+```bash
+DATABASE_URL=postgresql://...
+MAIN_ADMIN_PASSWORD=your_secure_password
+```
+
+3. Примените миграции и сгенерируйте Prisma Client:
+
+```bash
+npm run prisma:migrate
+npm run prisma:generate
+```
+
+4. Запустите dev‑сервер:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Как создать главного админа
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run seed-main-admin
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+По умолчанию будет создан пользователь:
 
-## Learn More
+- Email: `admin@apz.ru`
+- Пароль берётся из `MAIN_ADMIN_PASSWORD` в `.env`
 
-To learn more about Next.js, take a look at the following resources:
+## Тестовые данные
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run seed
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Что создаётся:
 
-## Deploy on Vercel
+- Главный админ (если ещё нет)
+- Тестовые школы
+- Завучи со статусом `isApproved: false`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Пароль для тестовых завучей можно переопределить через `TEST_ZAVUCH_PASSWORD` в `.env`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Структура проекта
+
+- `src/app` — страницы и API‑маршруты
+- `src/components` — UI и виджеты
+- `src/lib` — сервисы, парсеры, утилиты
+- `prisma` — схема и миграции
+
+## Лицензия
+
+Внутренний проект АПЗ. Все права защищены.
