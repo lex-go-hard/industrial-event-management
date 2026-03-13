@@ -1,0 +1,7 @@
+1. скрипт; powershell -ExecutionPolicy Bypass -File "C:\Users\Py3\Desktop\Project IT-ха\industrial-event-management\scripts\start-all.ps1"
+2 сервер; cd "C:\Users\Py3\Desktop\Project IT-ха\industrial-event-management"
+& "C:\Program Files\nodejs\npm.cmd" run dev
+3. бд; cd "C:\Users\Py3\Desktop\Project IT-ха\industrial-event-management"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+npm run prisma:studio
+
